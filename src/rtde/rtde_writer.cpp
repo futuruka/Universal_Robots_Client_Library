@@ -279,7 +279,7 @@ bool RTDEWriter::sendInputBitRegister(uint32_t register_id, bool value)
   return success;
 }
 
-bool RTDEWriter::sendInputIntRegister(uint32_t register_id, int32_t value)
+bool RTDEWriter::sendInputIntRegister(uint32_t register_id, int32_t value, bool send_package)
 {
   if (register_id < 24 || register_id > 47)
   {
@@ -295,7 +295,7 @@ bool RTDEWriter::sendInputIntRegister(uint32_t register_id, int32_t value)
 
   bool success = package_.setData(ss.str(), value);
 
-  if (success)
+  if (success && send_package)
   {
     if (!queue_.tryEnqueue(std::unique_ptr<DataPackage>(new DataPackage(package_))))
     {
@@ -305,7 +305,7 @@ bool RTDEWriter::sendInputIntRegister(uint32_t register_id, int32_t value)
   return success;
 }
 
-bool RTDEWriter::sendInputDoubleRegister(uint32_t register_id, double value)
+bool RTDEWriter::sendInputDoubleRegister(uint32_t register_id, double value, bool send_package)
 {
   if (register_id < 24 || register_id > 47)
   {
@@ -321,7 +321,7 @@ bool RTDEWriter::sendInputDoubleRegister(uint32_t register_id, double value)
 
   bool success = package_.setData(ss.str(), value);
 
-  if (success)
+  if (success && send_package)
   {
     if (!queue_.tryEnqueue(std::unique_ptr<DataPackage>(new DataPackage(package_))))
     {
@@ -329,6 +329,11 @@ bool RTDEWriter::sendInputDoubleRegister(uint32_t register_id, double value)
     }
   }
   return success;
+}
+
+bool RTDEWriter::sendPackage()
+{
+  return queue_.tryEnqueue(std::unique_ptr<DataPackage>(new DataPackage(package_)));
 }
 
 }  // namespace rtde_interface

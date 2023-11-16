@@ -141,7 +141,7 @@ public:
    *
    * \returns Success of the package creation
    */
-  bool sendInputIntRegister(uint32_t register_id, int32_t value);
+  bool sendInputIntRegister(uint32_t register_id, int32_t value, bool send_package = true);
 
   /*!
    * \brief Creates a package to request setting a new value for an input_double_register
@@ -151,7 +151,9 @@ public:
    *
    * \returns Success of the package creation
    */
-  bool sendInputDoubleRegister(uint32_t register_id, double value);
+  bool sendInputDoubleRegister(uint32_t register_id, double value, bool send_package = true);
+
+  bool sendPackage();
 
 private:
   uint8_t pinToMask(uint8_t pin);
