@@ -16,7 +16,9 @@ include(DefineCXX17CompilerFlag)
 DEFINE_CXX_17_COMPILER_FLAG(CXX17_FLAG)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -pedantic")
 
-add_library(urcl SHARED
+option(BUILD_SHARED_LIBS "Whether to build shared or static library" ON)
+
+add_library(urcl
     src/comm/tcp_socket.cpp
     src/comm/tcp_server.cpp
     src/control/reverse_interface.cpp
