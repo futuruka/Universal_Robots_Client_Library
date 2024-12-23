@@ -23,6 +23,7 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <atomic>
+#include <chrono>
 #include <mutex>
 #include <string>
 #include <memory>
@@ -50,19 +51,24 @@ class TCPSocket
 private:
   std::atomic<int> socket_fd_;
   std::atomic<SocketState> state_;
+  std::chrono::milliseconds reconnection_time_;
+  bool reconnection_time_modified_deprecated_ = false;
+
+  void setupOptions();
 
 protected:
-  virtual bool open(int socket_fd, struct sockaddr* address, size_t address_len)
+  static bool open(int socket_fd, struct sockaddr* address, size_t address_len)
   {
-    return false;
+    return ::connect(socket_fd, address, address_len) == 0;
   }
-  virtual void setOptions(int socket_fd);
 
-  bool setup(std::string& host, int port);
+  bool setup(const std::string& host, const int port, const size_t max_num_tries = 0,
+             const std::chrono::milliseconds reconnection_time = DEFAULT_RECONNECTION_TIME);
 
   std::unique_ptr<timeval> recv_timeout_;
 
 public:
+  static constexpr std::chrono::milliseconds DEFAULT_RECONNECTION_TIME{ 10000 };
   /*!
    * \brief Creates a TCPSocket object
    */
@@ -138,6 +144,15 @@ public:
    * \param timeout Timeout used for setting things up
    */
   void setReceiveTimeout(const timeval& timeout);
+
+  /*!
+   * \brief Set reconnection time, if the server is unavailable during connection this will set the time before
+   * trying connect to the server again.
+   *
+   * \param reconnection_time time in between connection attempts to the server
+   */
+  [[deprecated("Reconnection time is passed to setup directly now.")]] void
+  setReconnectionTime(const std::chrono::milliseconds reconnection_time);
 };
 }  // namespace comm
 }  // namespace urcl

@@ -2,6 +2,103 @@
 Changelog for package ur_client_library
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+1.5.0 (2024-11-25)
+------------------
+* Adapt RTDE output recipe based on robot response (`#221 <https://github.com/UniversalRobots/Universal_Robots_Client_Library/issues/221>`_)
+* CI: Fix flaky example runs (`#223 <https://github.com/UniversalRobots/Universal_Robots_Client_Library/issues/223>`_)
+* Giving force mode parameters as arguments when calling startForceMode (`#208 <https://github.com/UniversalRobots/Universal_Robots_Client_Library/issues/208>`_)
+* Add more arguments to start_ursim.sh (`#220 <https://github.com/UniversalRobots/Universal_Robots_Client_Library/issues/220>`_)
+* Tcp socket improvements (`#222 <https://github.com/UniversalRobots/Universal_Robots_Client_Library/issues/222>`_)
+* Added family photo to readme (`#219 <https://github.com/UniversalRobots/Universal_Robots_Client_Library/issues/219>`_)
+* Add missing algorithm include (`#214 <https://github.com/UniversalRobots/Universal_Robots_Client_Library/issues/214>`_)
+* Added missing RTDE data packages and fixed incorrect names (`#213 <https://github.com/UniversalRobots/Universal_Robots_Client_Library/issues/213>`_)
+* Contributors: Felix Exner, Remi Siffert, URJala
+
+1.4.0 (2024-09-10)
+------------------
+* Ensure that the targets are reachable within the robots limits (`#184 <https://github.com/UniversalRobots/Universal_Robots_Client_Library/issues/184>`_)
+* Analog domain (`#211 <https://github.com/UniversalRobots/Universal_Robots_Client_Library/issues/211>`_)
+* Fix clang compilation error (`#210 <https://github.com/UniversalRobots/Universal_Robots_Client_Library/issues/210>`_)
+* Moved reset of speed slider to correct teardown function, so that it … (`#206 <https://github.com/UniversalRobots/Universal_Robots_Client_Library/issues/206>`_)
+  …resets between each test.
+* [doc] Fix syntax in example.rst (`#207 <https://github.com/UniversalRobots/Universal_Robots_Client_Library/issues/207>`_)
+* [doc] Migrate documentation to sphinx (`#95 <https://github.com/UniversalRobots/Universal_Robots_Client_Library/issues/95>`_)
+* Contributors: Felix Exner, Mads Holm Peters, Remi Siffert, URJala
+
+1.3.7 (2024-06-03)
+------------------
+* [ci] Update CI
+  * Run downstream tests for ICI
+  * Correctly name jobs
+  * Test Jazzy driver
+* [start_ursim] Add program directory at correct location also when no model is provided
+* [start_ursim] Always check ursim version for compatibility
+* [start_ursim] Use a program folder per model
+* [ci] Update distros for prerelease test
+* Contributors: Felix Exner, Vincenzo Di Pentima
+
+1.3.6 (2024-04-04)
+------------------
+* Changed spline interpolation to use the last commanded joint velocity… (`#195 <https://github.com/UniversalRobots/Universal_Robots_Client_Library/issues/195>`_)
+* Contributors: Mads Holm Peters, Rune Søe-Knudsen
+
+1.3.5 (2024-02-23)
+------------------
+* Add support for UR30 in start_ursim.sh (`#193 <https://github.com/UniversalRobots/Universal_Robots_Client_Library/issues/193>`_)
+* Add header guard to datatypes.h (`#189 <https://github.com/UniversalRobots/Universal_Robots_Client_Library/pull/189>`_)
+* Remove duplicated entry in clang-format file (`#188 <https://github.com/UniversalRobots/Universal_Robots_Client_Library/pull/188>`_)
+* Wait after docker kill to prevent name conflicts (`#187 <https://github.com/UniversalRobots/Universal_Robots_Client_Library/issues/187>`_)
+* Contributors: Felix Exner, Robert Wilbrandt
+
+1.3.4 (2023-09-22)
+------------------
+* Make depreaction warning for keepalive_counter a warning instead of error (`#182 <https://github.com/UniversalRobots/Universal_Robots_Client_Library/issues/182>`_)
+* Added watchdog configuration for the reverse socket (`#178 <https://github.com/UniversalRobots/Universal_Robots_Client_Library/issues/178>`_)
+* Add support for ur20 in start_ursim script (`#179 <https://github.com/UniversalRobots/Universal_Robots_Client_Library/issues/179>`_)
+* Use pre-commit for clang-format (`#175 <https://github.com/UniversalRobots/Universal_Robots_Client_Library/issues/175>`_)
+* Make tcp_server retry binding the socket (`#176 <https://github.com/UniversalRobots/Universal_Robots_Client_Library/issues/176>`_)
+* Contributors: Felix Exner, Mads Holm Peters
+
+1.3.3 (2023-09-05)
+------------------
+* Add support for setting socket max num tries and reconnect timeout (`#172 <https://github.com/UniversalRobots/Universal_Robots_Client_Library/issues/172>`_)
+* Unify socket open (`#174 <https://github.com/UniversalRobots/Universal_Robots_Client_Library/issues/174>`_)
+* Added handling of spline interpolation with end point velocities (`#169 <https://github.com/UniversalRobots/Universal_Robots_Client_Library/issues/169>`_)
+* Throws exception if the URScript file doesn't exists (`#173 <https://github.com/UniversalRobots/Universal_Robots_Client_Library/issues/173>`_)
+* Added check to ensure receive timeout isn't overwritten (`#171 <https://github.com/UniversalRobots/Universal_Robots_Client_Library/issues/171>`_)
+* Added RTDEClient constructor with vector recipes (`#143 <https://github.com/UniversalRobots/Universal_Robots_Client_Library/issues/143>`_)
+* Only warn if system is not setup for FIFO scheduling (`#170 <https://github.com/UniversalRobots/Universal_Robots_Client_Library/issues/170>`_)
+* Ensuring that the Timestamp is always in the output recipe (`#168 <https://github.com/UniversalRobots/Universal_Robots_Client_Library/issues/168>`_)
+* CI: Add Iron to CI tests (`#167 <https://github.com/UniversalRobots/Universal_Robots_Client_Library/issues/167>`_)
+* Add issue templates for bugs and features (`#166 <https://github.com/UniversalRobots/Universal_Robots_Client_Library/issues/166>`_)
+* Updated license (`#164 <https://github.com/UniversalRobots/Universal_Robots_Client_Library/issues/164>`_)
+* Bugfixes for spline interpolation (`#162 <https://github.com/UniversalRobots/Universal_Robots_Client_Library/issues/162>`_)
+   * Add separate rounding in the conversion from float to int32
+   * Add more debug printout for splines
+   * Add Copying flight reports if CI fails
+   * Update ursim mininum version in start_ursim.sh
+* Fix the prerelease ci for Melodic (`#163 <https://github.com/UniversalRobots/Universal_Robots_Client_Library/issues/163>`_)
+* Contributors: Dag-Are Trydal, Felix Exner, Felix Exner (fexner), Mads Holm Peters, Michael Eriksen, RobertWilbrandt, Rune Søe-Knudsen, urmahp, urrsk
+
+1.3.2 (2023-07-13)
+------------------
+* Add a cmake option to activate address sanitizers (`#146 <https://github.com/UniversalRobots/Universal_Robots_Client_Library/issues/146>`_)
+* Install start ursim (`#155 <https://github.com/UniversalRobots/Universal_Robots_Client_Library/issues/155>`_)
+* Add spline interpolation on robot (`#151 <https://github.com/UniversalRobots/Universal_Robots_Client_Library/issues/151>`_)
+* Add codecov.yml to exclude test and examples folders (`#152 <https://github.com/UniversalRobots/Universal_Robots_Client_Library/issues/152>`_)
+* Make URSim log files available as artifacts also for the CI-industrial (`#153 <https://github.com/UniversalRobots/Universal_Robots_Client_Library/issues/153>`_)
+* Remove Foxy from CI
+* Add a script to run the examples instead of run-parts
+* Add SaveLog command to the Dashboard client
+* Make URSim log files available as artifacts
+* Specifically set RTDE pipeline producer to FIFO scheduling (`#139 <https://github.com/UniversalRobots/Universal_Robots_Client_Library/issues/139>`_)
+* Added support for force_mode, freedrive and tool contact (`#138 <https://github.com/UniversalRobots/Universal_Robots_Client_Library/issues/138>`_)
+* Docs: Update link to ros_industrial_cmake_boilerplate
+* Added tests for the comm classes (`#129 <https://github.com/UniversalRobots/Universal_Robots_Client_Library/issues/129>`_)
+* Changed num_retries from static to an unsigned int (`#136 <https://github.com/UniversalRobots/Universal_Robots_Client_Library/issues/136>`_)
+* Build downstream humble version from humble branch (`#132 <https://github.com/UniversalRobots/Universal_Robots_Client_Library/issues/132>`_)
+* Contributors: Felix Exner, Mads Holm Peters, Rune Søe-Knudsen, Robert Wilbrandt
+
 1.3.1 (2022-11-30)
 ------------------
 * CI: Add a prerelease check that calls `bloom-generate` (`#134 <https://github.com/UniversalRobots/Universal_Robots_Client_Library/issues/134>`_)

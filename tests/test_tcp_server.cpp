@@ -31,6 +31,7 @@
 #include <gtest/gtest.h>
 #include <condition_variable>
 #include <chrono>
+#include <memory>
 
 #include <ur_client_library/comm/tcp_server.h>
 #include <ur_client_library/comm/tcp_socket.h>
@@ -72,12 +73,6 @@ protected:
         }
       }
       return result.str();
-    }
-
-  protected:
-    virtual bool open(int socket_fd, struct sockaddr* address, size_t address_len)
-    {
-      return ::connect(socket_fd, address, address_len) == 0;
     }
   };
 
@@ -175,7 +170,7 @@ TEST_F(TCPServerTest, socket_creation)
   comm::TCPServer server(port_);
 
   // Shouldn't be able to create antoher server on same port
-  EXPECT_THROW(comm::TCPServer server2(port_), std::system_error);
+  EXPECT_THROW(comm::TCPServer server2(port_, 1, std::chrono::milliseconds(1)), std::system_error);
 
   server.start();
 
@@ -225,13 +220,12 @@ TEST_F(TCPServerTest, unlimited_clients_allowed)
   server.start();
 
   // Test that a large number of clients can connect to the server
-  std::vector<Client*> clients;
-  Client* client;
+  std::vector<std::unique_ptr<Client>> clients;
+  std::unique_ptr<Client> client;
   for (unsigned int i = 0; i < 100; ++i)
   {
-    client = new Client(port_);
+    clients.push_back(std::make_unique<Client>(port_));
     ASSERT_TRUE(waitForConnectionCallback());
-    clients.push_back(client);
   }
 }
 
@@ -331,6 +325,12 @@ TEST_F(TCPServerTest, client_connections)
   EXPECT_FALSE(server.write(client1_fd, data, len, written));
   EXPECT_FALSE(server.write(client2_fd, data, len, written));
   EXPECT_FALSE(server.write(client3_fd, data, len, written));
+}
+TEST_F(TCPServerTest, check_address_already_in_use)
+{
+  comm::TCPServer blocking_server(12321);
+
+  EXPECT_THROW(comm::TCPServer test_server(12321, 2, std::chrono::milliseconds(500)), std::system_error);
 }
 
 int main(int argc, char* argv[])

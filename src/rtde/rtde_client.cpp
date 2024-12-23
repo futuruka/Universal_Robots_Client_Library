@@ -35,13 +35,33 @@ namespace urcl
 namespace rtde_interface
 {
 RTDEClient::RTDEClient(std::string robot_ip, comm::INotifier& notifier, const std::string& output_recipe_file,
-                       const std::string& input_recipe_file, double target_frequency)
+                       const std::string& input_recipe_file, double target_frequency, bool ignore_unavailable_outputs)
   : stream_(robot_ip, UR_RTDE_PORT)
-  , output_recipe_(readRecipe(output_recipe_file))
+  , output_recipe_(ensureTimestampIsPresent(readRecipe(output_recipe_file)))
+  , ignore_unavailable_outputs_(ignore_unavailable_outputs)
   , input_recipe_(readRecipe(input_recipe_file))
   , parser_(output_recipe_)
-  , prod_(stream_, parser_)
-  , pipeline_(prod_, PIPELINE_NAME, notifier)
+  , prod_(std::make_unique<comm::URProducer<RTDEPackage>>(stream_, parser_))
+  , notifier_(notifier)
+  , pipeline_(std::make_unique<comm::Pipeline<RTDEPackage>>(*prod_, PIPELINE_NAME, notifier, true))
+  , writer_(&stream_, input_recipe_)
+  , max_frequency_(URE_MAX_FREQUENCY)
+  , target_frequency_(target_frequency)
+  , client_state_(ClientState::UNINITIALIZED)
+{
+}
+
+RTDEClient::RTDEClient(std::string robot_ip, comm::INotifier& notifier, const std::vector<std::string>& output_recipe,
+                       const std::vector<std::string>& input_recipe, double target_frequency,
+                       bool ignore_unavailable_outputs)
+  : stream_(robot_ip, UR_RTDE_PORT)
+  , output_recipe_(ensureTimestampIsPresent(output_recipe))
+  , ignore_unavailable_outputs_(ignore_unavailable_outputs)
+  , input_recipe_(input_recipe)
+  , parser_(output_recipe_)
+  , prod_(std::make_unique<comm::URProducer<RTDEPackage>>(stream_, parser_))
+  , notifier_(notifier)
+  , pipeline_(std::make_unique<comm::Pipeline<RTDEPackage>>(*prod_, PIPELINE_NAME, notifier, true))
   , writer_(&stream_, input_recipe_)
   , max_frequency_(URE_MAX_FREQUENCY)
   , target_frequency_(target_frequency)
@@ -54,17 +74,17 @@ RTDEClient::~RTDEClient()
   disconnect();
 }
 
-bool RTDEClient::init()
+bool RTDEClient::init(const size_t max_num_tries, const std::chrono::milliseconds reconnection_time)
 {
   if (client_state_ > ClientState::UNINITIALIZED)
   {
     return true;
   }
 
-  static unsigned attempts = 0;
+  unsigned int attempts = 0;
   while (attempts < MAX_INITIALIZE_ATTEMPTS)
   {
-    setupCommunication();
+    setupCommunication(max_num_tries, reconnection_time);
     if (client_state_ == ClientState::INITIALIZED)
       return true;
 
@@ -77,12 +97,12 @@ bool RTDEClient::init()
   throw UrException(ss.str());
 }
 
-void RTDEClient::setupCommunication()
+void RTDEClient::setupCommunication(const size_t max_num_tries, const std::chrono::milliseconds reconnection_time)
 {
   client_state_ = ClientState::INITIALIZING;
   // A running pipeline is needed inside setup
-  pipeline_.init();
-  pipeline_.run();
+  pipeline_->init(max_num_tries, reconnection_time);
+  pipeline_->run();
 
   uint16_t protocol_version = MAX_RTDE_PROTOCOL_VERSION;
   while (!negotiateProtocolVersion(protocol_version) && client_state_ == ClientState::INITIALIZING)
@@ -136,7 +156,7 @@ void RTDEClient::setupCommunication()
     return;
 
   // We finished communication for now
-  pipeline_.stop();
+  pipeline_->stop();
   client_state_ = ClientState::INITIALIZED;
 }
 
@@ -144,7 +164,7 @@ bool RTDEClient::negotiateProtocolVersion(const uint16_t protocol_version)
 {
   // Protocol version should always be 1 before starting negotiation
   parser_.setProtocolVersion(1);
-  static unsigned num_retries = 0;
+  unsigned int num_retries = 0;
   uint8_t buffer[4096];
   size_t size;
   size_t written;
@@ -159,7 +179,7 @@ bool RTDEClient::negotiateProtocolVersion(const uint16_t protocol_version)
   while (num_retries < MAX_REQUEST_RETRIES)
   {
     std::unique_ptr<RTDEPackage> package;
-    if (!pipeline_.getLatestProduct(package, std::chrono::milliseconds(1000)))
+    if (!pipeline_->getLatestProduct(package, std::chrono::milliseconds(1000)))
     {
       URCL_LOG_ERROR("failed to get package from rtde interface, disconnecting");
       disconnect();
@@ -190,7 +210,7 @@ bool RTDEClient::negotiateProtocolVersion(const uint16_t protocol_version)
 
 void RTDEClient::queryURControlVersion()
 {
-  static unsigned num_retries = 0;
+  unsigned int num_retries = 0;
   uint8_t buffer[4096];
   size_t size;
   size_t written;
@@ -205,7 +225,7 @@ void RTDEClient::queryURControlVersion()
   std::unique_ptr<RTDEPackage> package;
   while (num_retries < MAX_REQUEST_RETRIES)
   {
-    if (!pipeline_.getLatestProduct(package, std::chrono::milliseconds(1000)))
+    if (!pipeline_->getLatestProduct(package, std::chrono::milliseconds(1000)))
     {
       URCL_LOG_ERROR("No answer to urcontrol version query was received from robot, disconnecting");
       disconnect();
@@ -234,46 +254,52 @@ void RTDEClient::queryURControlVersion()
   throw UrException(ss.str());
 }
 
+void RTDEClient::resetOutputRecipe(const std::vector<std::string> new_recipe)
+{
+  prod_->teardownProducer();
+  disconnect();
+
+  output_recipe_.assign(new_recipe.begin(), new_recipe.end());
+  parser_ = RTDEParser(output_recipe_);
+  prod_ = std::make_unique<comm::URProducer<RTDEPackage>>(stream_, parser_);
+  pipeline_ = std::make_unique<comm::Pipeline<RTDEPackage>>(*prod_, PIPELINE_NAME, notifier_, true);
+}
+
 void RTDEClient::setupOutputs(const uint16_t protocol_version)
 {
-  static unsigned num_retries = 0;
+  unsigned int num_retries = 0;
   size_t size;
   size_t written;
-  uint8_t buffer[4096];
+  uint8_t buffer[8192];
   URCL_LOG_INFO("Setting up RTDE communication with frequency %f", target_frequency_);
-  // Add timestamp to rtde output recipe, used to check if robot is booted
-  const std::string timestamp = "timestamp";
-  auto it = std::find(output_recipe_.begin(), output_recipe_.end(), timestamp);
-  if (it == output_recipe_.end())
-  {
-    output_recipe_.push_back(timestamp);
-  }
-  if (protocol_version == 2)
-  {
-    size = ControlPackageSetupOutputsRequest::generateSerializedRequest(buffer, target_frequency_, output_recipe_);
-  }
-  else
-  {
-    if (target_frequency_ != max_frequency_)
-    {
-      URCL_LOG_WARN("It is not possible to set a target frequency when using protocol version 1. A frequency "
-                    "equivalent to the maximum frequency will be used instead.");
-    }
-    size = ControlPackageSetupOutputsRequest::generateSerializedRequest(buffer, output_recipe_);
-  }
-
-  // Send output recipe to robot
-  if (!stream_.write(buffer, size, written))
-  {
-    URCL_LOG_ERROR("Could not send RTDE output recipe to robot, disconnecting");
-    disconnect();
-    return;
-  }
 
   while (num_retries < MAX_REQUEST_RETRIES)
   {
+    URCL_LOG_DEBUG("Sending output recipe");
+    if (protocol_version == 2)
+    {
+      size = ControlPackageSetupOutputsRequest::generateSerializedRequest(buffer, target_frequency_, output_recipe_);
+    }
+    else
+    {
+      if (target_frequency_ != max_frequency_)
+      {
+        URCL_LOG_WARN("It is not possible to set a target frequency when using protocol version 1. A frequency "
+                      "equivalent to the maximum frequency will be used instead.");
+      }
+      size = ControlPackageSetupOutputsRequest::generateSerializedRequest(buffer, output_recipe_);
+    }
+
+    // Send output recipe to robot
+    if (!stream_.write(buffer, size, written))
+    {
+      URCL_LOG_ERROR("Could not send RTDE output recipe to robot, disconnecting");
+      disconnect();
+      return;
+    }
+
     std::unique_ptr<RTDEPackage> package;
-    if (!pipeline_.getLatestProduct(package, std::chrono::milliseconds(1000)))
+    if (!pipeline_->getLatestProduct(package, std::chrono::milliseconds(1000)))
     {
       URCL_LOG_ERROR("Did not receive confirmation on RTDE output recipe, disconnecting");
       disconnect();
@@ -285,18 +311,53 @@ void RTDEClient::setupOutputs(const uint16_t protocol_version)
 
     {
       std::vector<std::string> variable_types = splitVariableTypes(tmp_output->variable_types_);
+      std::vector<std::string> available_variables;
+      std::vector<std::string> unavailable_variables;
       assert(output_recipe_.size() == variable_types.size());
       for (std::size_t i = 0; i < variable_types.size(); ++i)
       {
-        URCL_LOG_DEBUG("%s confirmed as datatype: %s", output_recipe_[i].c_str(), variable_types[i].c_str());
+        const std::string variable_name = output_recipe_[i];
+        URCL_LOG_DEBUG("%s confirmed as datatype: %s", variable_name.c_str(), variable_types[i].c_str());
+
         if (variable_types[i] == "NOT_FOUND")
         {
-          std::string message = "Variable '" + output_recipe_[i] +
-                                "' not recognized by the robot. Probably your output recipe contains errors";
-          throw UrException(message);
+          unavailable_variables.push_back(variable_name);
+        }
+        else
+        {
+          available_variables.push_back(variable_name);
         }
       }
-      return;
+
+      if (!unavailable_variables.empty())
+      {
+        std::stringstream error_message;
+        error_message << "The following variables are not recognized by the robot: ";
+        std::for_each(unavailable_variables.begin(), unavailable_variables.end(),
+                      [&error_message](const std::string& variable_name) { error_message << variable_name << " "; });
+        error_message << ". Either your output recipe contains errors "
+                         "or the urcontrol version does not support "
+                         "them.";
+
+        if (ignore_unavailable_outputs_)
+        {
+          error_message << " They will be removed from the output recipe.";
+          URCL_LOG_WARN("%s", error_message.str().c_str());
+
+          // Some variables are not available so retry setting up the communication with a stripped-down output recipe
+          resetOutputRecipe(available_variables);
+        }
+        else
+        {
+          URCL_LOG_ERROR("%s", error_message.str().c_str());
+          throw UrException(error_message.str());
+        }
+      }
+      else
+      {
+        // All variables are accounted for in the RTDE package
+        return;
+      }
     }
     else
     {
@@ -316,7 +377,7 @@ void RTDEClient::setupOutputs(const uint16_t protocol_version)
 
 void RTDEClient::setupInputs()
 {
-  static unsigned num_retries = 0;
+  unsigned int num_retries = 0;
   size_t size;
   size_t written;
   uint8_t buffer[4096];
@@ -331,7 +392,7 @@ void RTDEClient::setupInputs()
   while (num_retries < MAX_REQUEST_RETRIES)
   {
     std::unique_ptr<RTDEPackage> package;
-    if (!pipeline_.getLatestProduct(package, std::chrono::milliseconds(1000)))
+    if (!pipeline_->getLatestProduct(package, std::chrono::milliseconds(1000)))
     {
       URCL_LOG_ERROR("Did not receive confirmation on RTDE input recipe, disconnecting");
       disconnect();
@@ -384,9 +445,12 @@ void RTDEClient::setupInputs()
 void RTDEClient::disconnect()
 {
   // If communication is started it should be paused before disconnecting
-  sendPause();
-  pipeline_.stop();
-  stream_.disconnect();
+  if (client_state_ > ClientState::UNINITIALIZED)
+  {
+    sendPause();
+    pipeline_->stop();
+    stream_.disconnect();
+  }
   client_state_ = ClientState::UNINITIALIZED;
 }
 
@@ -410,7 +474,7 @@ bool RTDEClient::isRobotBooted()
   {
     // Set timeout based on target frequency, to make sure that reading doesn't timeout
     int timeout = static_cast<int>((1 / target_frequency_) * 1000) * 10;
-    if (pipeline_.getLatestProduct(package, std::chrono::milliseconds(timeout)))
+    if (pipeline_->getLatestProduct(package, std::chrono::milliseconds(timeout)))
     {
       rtde_interface::DataPackage* tmp_input = dynamic_cast<rtde_interface::DataPackage*>(package.get());
       tmp_input->getData("timestamp", timestamp);
@@ -440,7 +504,7 @@ bool RTDEClient::start()
     return false;
   }
 
-  pipeline_.run();
+  pipeline_->run();
 
   if (sendStart())
   {
@@ -488,10 +552,10 @@ bool RTDEClient::sendStart()
   }
 
   std::unique_ptr<RTDEPackage> package;
-  static unsigned num_retries = 0;
+  unsigned int num_retries = 0;
   while (num_retries < MAX_REQUEST_RETRIES)
   {
-    if (!pipeline_.getLatestProduct(package, std::chrono::milliseconds(1000)))
+    if (!pipeline_->getLatestProduct(package, std::chrono::milliseconds(1000)))
     {
       URCL_LOG_ERROR("Could not get response to RTDE communication start request from robot");
       return false;
@@ -533,7 +597,7 @@ bool RTDEClient::sendPause()
   int seconds = 5;
   while (std::chrono::steady_clock::now() - start < std::chrono::seconds(seconds))
   {
-    if (!pipeline_.getLatestProduct(package, std::chrono::milliseconds(1000)))
+    if (!pipeline_->getLatestProduct(package, std::chrono::milliseconds(1000)))
     {
       URCL_LOG_ERROR("Could not get response to RTDE communication pause request from robot");
       return false;
@@ -549,7 +613,7 @@ bool RTDEClient::sendPause()
   throw UrException(ss.str());
 }
 
-std::vector<std::string> RTDEClient::readRecipe(const std::string& recipe_file)
+std::vector<std::string> RTDEClient::readRecipe(const std::string& recipe_file) const
 {
   std::vector<std::string> recipe;
   std::ifstream file(recipe_file);
@@ -560,10 +624,34 @@ std::vector<std::string> RTDEClient::readRecipe(const std::string& recipe_file)
     URCL_LOG_ERROR("%s", msg.str().c_str());
     throw UrException(msg.str());
   }
+
+  if (file.peek() == std::ifstream::traits_type::eof())
+  {
+    std::stringstream msg;
+    msg << "The recipe '" << recipe_file << "' file is empty exiting ";
+    URCL_LOG_ERROR("%s", msg.str().c_str());
+    throw UrException(msg.str());
+  }
+
   std::string line;
   while (std::getline(file, line))
   {
     recipe.push_back(line);
+  }
+
+  return recipe;
+}
+
+std::vector<std::string> RTDEClient::ensureTimestampIsPresent(const std::vector<std::string>& output_recipe) const
+{
+  // Add timestamp to rtde output recipe, if not already existing.
+  // The timestamp is used to check if robot is booted or not.
+  std::vector<std::string> recipe = output_recipe;
+  const std::string timestamp = "timestamp";
+  auto it = std::find(recipe.begin(), recipe.end(), timestamp);
+  if (it == recipe.end())
+  {
+    recipe.push_back(timestamp);
   }
   return recipe;
 }
@@ -571,7 +659,7 @@ std::vector<std::string> RTDEClient::readRecipe(const std::string& recipe_file)
 std::unique_ptr<rtde_interface::DataPackage> RTDEClient::getDataPackage(std::chrono::milliseconds timeout)
 {
   std::unique_ptr<RTDEPackage> urpackage;
-  if (pipeline_.getLatestProduct(urpackage, timeout))
+  if (pipeline_->getLatestProduct(urpackage, timeout))
   {
     rtde_interface::DataPackage* tmp = dynamic_cast<rtde_interface::DataPackage*>(urpackage.get());
     if (tmp != nullptr)
