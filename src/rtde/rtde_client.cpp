@@ -529,7 +529,7 @@ bool RTDEClient::pause()
 
   if (sendPause())
   {
-    pipeline_.stop();
+    pipeline_->stop();
     client_state_ = ClientState::PAUSED;
     return true;
   }
